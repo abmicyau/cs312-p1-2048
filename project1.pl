@@ -1,18 +1,31 @@
 % 2048 in SWI-Prolog
 % CPSC 312 2017W1
 % Project 1
+%
+% To start a game, type
+%  start.
+%
 
 start :-
-  start(
-  [[0,0,0,0],
-   [0,0,0,0],
-   [0,0,0,0],
-   [0,0,0,0]]).
+  board(4, B),
+  start(B).
 start(B) :-
   welcome,
   new_number(B, B1),
   new_number(B1, B2),
   play(B2).
+
+board(N, B) :-
+  board(N, N, B).
+board(0, _, []).
+board(R1, C, [H|T]) :-
+  row(C, H),
+  board(R0, C, T),
+  R1 is R0+1.
+row(0, []).
+row(C1, [0|T]) :-
+  row(C0, T),
+  C1 is C0+1.
 
 welcome :-
   write("Welcome to 2048! Slide the board by"), nl,
@@ -20,22 +33,24 @@ welcome :-
 
 show_state(B) :-
   nl,
-  write("           1"), nl,
-  write("           \u2191"), nl,
-  write("      4 \u2190     \u2192 2"), nl,
-  write("           \u2193"), nl,
-  write("           3"), nl, nl,
+  write("             CONTROL"), nl,
+  write("         \u250F"), write("\u2501"), repeat(" ", 11), write("\u2501"), write("\u2513"), nl,
+  write("         \u2503      1      \u2503"), nl,
+  write("                \u2191       "), nl,
+  write("           4 \u2190     \u2192 2  "), nl,
+  write("                \u2193       "), nl,
+  write("         \u2503      3      \u2503"), nl,
+  write("         \u2517"), write("\u2501"), repeat(" ", 11), write("\u2501"), write("\u251B"), nl,
   display(B), nl.
 
-play(B1) :-
-  lose(B1),
+play(B) :-
+  lose(B),
   write("You lose!"), nl.
 play(B1) :-
   show_state(B1),
   read(D), nl,
   slide(B1, D, B2),
   new_number(B2, B3),
-  display(B3), nl,
   play(B3).
 
 % lose(B) is true if no move is possible that will free up a square in B
@@ -53,14 +68,21 @@ lose(B) :-
 %  down:  3
 %  left:  4
 %
+% TODO: add recovery
+%
 slide(B1, 1, B2) :-
+  dif(B1, B2),
   slide_up(B1, B2).
 slide(B1, 2, B2) :-
+  dif(B1, B2),
   slide_right(B1, B2).
 slide(B1, 3, B2) :-
+  dif(B1, B2),
   slide_down(B1, B2).
 slide(B1, 4, B2) :-
+  dif(B1, B2),
   slide_left(B1, B2).
+slide(B, _, B) :- play(B).
 
 % slide_right(B1, B2) is true if B2 is the result of sliding board (matrix) B1
 % to the right, collapsing all elements to the right according to the standard
@@ -110,15 +132,21 @@ sink_right(E, [E|T], [0,EE|T]) :-
 sink_right(E, [0|T], [0|R]) :-
   sink_right(E, T, R).
 
-% new_number(B1, B2) is true if B2 is the result of placing a 2 into the game
-% board B1 at a random location containing a 0.
+% new_number(B1, B2) is true if B2 is the result of placing a 2 or 4 (chosen
+% randomly with probabilities 0.9 and 0.1 respectively) into the game board B1
+% at a random location containing a 0.
 %
 new_number(B1, B2) :-
-  nonzero(B1, NZ),
+  zeroes(B1, NZ),
   size(NZ, N),
   random_between(1, N, NR),
   nth(NZ,NR,[R,C]),
-  replace_m(2,R,C,B1,B2).
+  random_between(1, 10, NR2),
+  random_tile(NR2, NR3),
+  replace_m(NR3,R,C,B1,B2).
+random_tile(1, 4).
+random_tile(N, 2) :-
+  N>1.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -169,33 +197,33 @@ nth([_|T], N1, E) :-
   nth(T, N0, E),
   N1 is N0+1.
 
-% nonzero(M, L) is true if L is a list of coordinates [R, C] of the zero
+% zeroes(M, L) is true if L is a list of coordinates [R, C] of the zero
 % elements of matrix M.
 %
-% nonzero_row(H, L, R) is true if L is a list of coordinates [R, C] of the zero
+% zeroes_row(H, L, R) is true if L is a list of coordinates [R, C] of the zero
 % elements of list H given row R.
 %
-nonzero(M, L) :-
+zeroes(M, L) :-
   size(M, N0),
   N1 is N0+1,
-  nonzero(M, L, N1, _).
-nonzero([], [], N, N).
-nonzero([H|T], L0, N, R0) :-
-  nonzero_row(H, L1, R0),
-  nonzero(T, L2, N, R1),
+  zeroes(M, L, N1, _).
+zeroes([], [], N, N).
+zeroes([H|T], L0, N, R0) :-
+  zeroes_row(H, L1, R0),
+  zeroes(T, L2, N, R1),
   append(L1, L2, L0),
   R0 is R1-1.
-nonzero_row(H, L, R) :-
+zeroes_row(H, L, R) :-
   size(H, N0),
   N1 is N0+1,
-  nonzero_row(H, L, R, N1, _).
-nonzero_row([], [], _, N, N).
-nonzero_row([0|T], [[R,C0]|L1], R, N, C0) :-
-  nonzero_row(T, L1, R, N, C1),
+  zeroes_row(H, L, R, N1, _).
+zeroes_row([], [], _, N, N).
+zeroes_row([0|T], [[R,C0]|L1], R, N, C0) :-
+  zeroes_row(T, L1, R, N, C1),
   C0 is C1-1.
-nonzero_row([H|T], L1, R, N, C0) :-
+zeroes_row([H|T], L1, R, N, C0) :-
   dif(H, 0),
-  nonzero_row(T, L1, R, N, C1),
+  zeroes_row(T, L1, R, N, C1),
   C0 is C1-1.
 
 % replace_m(E,R,I,M1,M2) is true if M2 is the result of replacing the
@@ -225,16 +253,82 @@ replace_l(E, I1, [H|T], [H|R]) :-
 % display_row(L) is true if list L is is written to the console, with each
 % element padded to 5 spaces.
 %
-display([]).
-display([H|T]) :-
+display(B) :-
+  top_border(B),
+  display_helper(B).
+display_helper([H]) :-
+  side_border(H),
   display_row(H),
-  display(T).
+  side_border(H),
+  bottom_border(H).
+display_helper([H|T]) :-
+  side_border(H),
+  display_row(H),
+  side_border(H),
+  middle_border(H),
+  display_helper(T).
+
 display_row([]) :-
-  nl, nl.
+  write("\u2503"),
+  nl.
 display_row([H|T]) :-
   dif(H,0),
-  writef('%5R', [H]),
+  write("\u2503"),
+  writef("%6R ", [H]),
   display_row(T).
 display_row([0|T]) :-
-  write("    -"),
+  write("\u2503"),
+  repeat(" ", 7),
   display_row(T).
+
+top_border(B) :-
+  write("\u250F"),
+  top_border_helper(B).
+top_border_helper([_]) :-
+  repeat("\u2501", 7),
+  write("\u2513"),
+  nl.
+top_border_helper([_|T]) :-
+  repeat("\u2501", 7),
+  write("\u2533"),
+  top_border_helper(T).
+
+middle_border(B) :-
+  write("\u2523"),
+  middle_border_helper(B).
+middle_border_helper([_]) :-
+  repeat("\u2501", 7),
+  write("\u252B"),
+  nl.
+middle_border_helper([_|T]) :-
+  repeat("\u2501", 7),
+  write("\u254B"),
+  middle_border_helper(T).
+
+bottom_border(B) :-
+  write("\u2517"),
+  bottom_border_helper(B).
+bottom_border_helper([_]) :-
+  repeat("\u2501", 7),
+  write("\u251B"),
+  nl.
+bottom_border_helper([_|T]) :-
+  repeat("\u2501", 7),
+  write("\u253B"),
+  bottom_border_helper(T).
+
+side_border([]) :-
+  write("\u2503"),
+  nl.
+side_border([_|T]) :-
+  write("\u2503"),
+  repeat(" ", 7),
+  side_border(T).
+
+% repeat(S, N) is true if string S is written to the console N times
+repeat(_, 0).
+repeat(S, N1) :-
+  write(S),
+  repeat(S, N0),
+  N1 is N0+1.
+
