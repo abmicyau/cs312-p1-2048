@@ -45,7 +45,9 @@ show_state(B) :-
 
 play(B) :-
   lose(B),
-  write("You lose!"), nl.
+  show_state(B),
+  write("You lose!"), nl, nl,
+  abort.
 play(B1) :-
   show_state(B1),
   read(D), nl,
@@ -68,8 +70,6 @@ lose(B) :-
 %  down:  3
 %  left:  4
 %
-% TODO: add recovery
-%
 slide(B1, 1, B2) :-
   dif(B1, B2),
   slide_up(B1, B2).
@@ -82,7 +82,8 @@ slide(B1, 3, B2) :-
 slide(B1, 4, B2) :-
   dif(B1, B2),
   slide_left(B1, B2).
-slide(B, _, B) :- play(B).
+slide(B, _, B) :-
+  play(B).
 
 % slide_right(B1, B2) is true if B2 is the result of sliding board (matrix) B1
 % to the right, collapsing all elements to the right according to the standard
@@ -332,3 +333,153 @@ repeat(S, N1) :-
   repeat(S, N0),
   N1 is N0+1.
 
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%                                                                              %
+%                                      AI                                      %
+%                                                                              %
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% After looking through some of the posts on:
+%  https://stackoverflow.com/questions/22342854
+%
+% Some of the algorithms are rather complicated, so we chose one of the simpler
+% approaches. Here we use a multi-depth exhaustive search algorithm that favours
+% empty squares, performing the move which maximizes the maximum number of empty
+% squares at any step after performing D moves (for search depth D). Since there
+% are 4 possible moves per step, and at each step we need to count over N^2
+% tiles for a NxN board, the runtime per move is O(4^D * N^2).
+
+start_auto :-
+  board(4, B),
+  start_auto(B).
+start_auto(B) :-
+  new_number(B, B1),
+  new_number(B1, B2),
+  play_auto(B2).
+
+play_auto(B) :-
+  lose(B),
+  show_state(B),
+  write("You lose!"), nl, nl,
+  abort.
+play_auto(B1) :-
+  show_state(B1), nl,
+  %% first_valid_move(B1, [1,2,3,4], D),
+  optimal_move(B1, 2, D),
+  slide_auto(B1, D, B2),
+  new_number(B2, B3),
+  play_auto(B3).
+
+slide_auto(B1, 1, B2) :-
+  slide_up(B1, B2).
+slide_auto(B1, 2, B2) :-
+  slide_right(B1, B2).
+slide_auto(B1, 3, B2) :-
+  slide_down(B1, B2).
+slide_auto(B1, 4, B2) :-
+  slide_left(B1, B2).
+
+% optimal_move(B, D, N) is true if N is the integer representation of the
+% direction of the 'optimal' move on board B, given a search depth of D.
+% We define an optimal move being the first of a sequence of D moves which has
+% the largest value of the maximum number of empty tiles at any step of each
+% sequence of D moves.
+%
+% If D is 0, a move is chosen at random.
+%
+optimal_move(B, D1, N) :-
+  D0 is D1-1,
+  optimal_move(B, D0, Z1, 1),
+  optimal_move(B, D0, Z2, 2),
+  optimal_move(B, D0, Z3, 3),
+  optimal_move(B, D0, Z4, 4),
+  generate_moves([Z1, Z2, Z3, Z4], L),
+  first_valid_move(B, L, N).
+
+optimal_move(B1, 0, Z, N) :-
+  slide_auto(B1, N, B2),
+  zeroes_count(B2, Z).
+
+optimal_move(B1, D1, Z, N) :-
+  D0 is D1-1,
+  slide_auto(B1, N, B2),
+  zeroes_count(B2, Z5),
+  optimal_move(B2, D0, Z1, 1),
+  optimal_move(B2, D0, Z2, 2),
+  optimal_move(B2, D0, Z3, 3),
+  optimal_move(B2, D0, Z4, 4),
+  max([Z1,Z2,Z3,Z4,Z5], Z).
+
+% generate_moves(L, M) is true if M is a sorted list of moves, from best to
+% worst, given a list of scores L (number of empty tiles obtained by
+% performing each move).
+%
+generate_moves(L, []) :-
+  max_pos(L, -1).
+generate_moves(L, [N|T]) :-
+  dif(L,[]),
+  max_pos(L, N),
+  replace_l(-1.0Inf, N, L, R),
+  generate_moves(R, T).
+
+% Given a list of possible moves L, first_valid_move(B, L, N) is true if N is
+% the first non-trivial move on board B.
+%
+first_valid_move(B1, [N|_], N) :-
+  slide_auto(B1, N, B2),
+  dif(B1, B2).
+first_valid_move(B, [N1|T], N2) :-
+  slide_auto(B, N1, B),
+  first_valid_move(B, T, N2).
+
+% max(L, E) is true if E is the largest element in L
+%
+max(L, E) :-
+  max(L, -1.0Inf, E).
+max([], E, E).
+max([H|T], A, E) :-
+  H>A,
+  max(T, H, E).
+max([H|T], A, E) :-
+  H=<A,
+  max(T, A, E).
+
+% max_pos(L, I) is true if I is the position of the largest element in L
+% (1-indexed)
+%
+max_pos(L, I) :-
+  max_pos(L, -1.0Inf, 1, -1, I).
+max_pos([], _, _, C, C).
+max_pos([H|T], A, P0, _, I) :-
+  H>A,
+  P1 is P0+1,
+  max_pos(T, H, P1, P0, I).
+max_pos([H|T], A, P0, C, I) :-
+  H=<A,
+  P1 is P0+1,
+  max_pos(T, A, P1, C, I).
+
+% slice(L, N, R) is true if R is equal to list L with element at position N
+% removed (1-indexed).
+%
+slice([_|T], 1, T).
+slice([H|T], N1, [H|R]) :-
+  slice(T, N0, R),
+  N1 is N0+1.
+
+% zeroes_count(M, N) is true if N is the number of zero tiles in matrix M.
+%
+% zeroes_count_row(L, N) is true if N is the number of zero tiles in list L.
+%
+zeroes_count([], 0).
+zeroes_count([H|T], N2) :-
+  zeroes_count_row(H, N0),
+  zeroes_count(T, N1),
+  N2 is N0+N1.
+zeroes_count_row([], 0).
+zeroes_count_row([0|T], N1) :-
+  zeroes_count_row(T, N0),
+  N1 is N0+1.
+zeroes_count_row([H|T], N) :-
+  dif(H, 0),
+  zeroes_count_row(T, N).
