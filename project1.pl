@@ -57,8 +57,7 @@ show_state(B, S) :-
   write("\u2503       \u2193       \u2503"), writef("%14R \u2503", [S]), nl,
   write("\u2503       3       \u2503               \u2503"), nl,
   write("\u2517"), repeat("\u2501", 15), write("\u253B"), repeat("\u2501", 15), write("\u251B"), nl,
-  display(B),
-  write(" Score: "), write(S), nl, nl.
+  display(B), nl.
 
 % play(B, S) is true if no moves are possible from board state B. Until then,
 % moves are continuously read from user input.
@@ -99,7 +98,7 @@ lose(B) :-
 %  left:  4
 %
 % where S is the score obtained from performing such a move, and C is the
-% current score.
+% current score (which is used only to recover from invalid moves).
 %
 slide(B1, 1, B2, S, _) :-
   dif(B1, B2),
@@ -206,7 +205,7 @@ reverse([H|T], A, R) :-
   reverse(T, [H|A], R).
 
 % transpose(M1, M2) is true if M2 is the transpose of matrix M1.
-% From the old SWI-Prolog library.
+% From the old SWI-Prolog library (apparently).
 % SOURCE: https://stackoverflow.com/questions/4280986
 %
 transpose([], []).
@@ -285,10 +284,9 @@ replace_l(E, I1, [H|T], [H|R]) :-
 %                                                                              %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% display(B) is true if the game board (matrix) B is written to the console.
-%
-% display_row(L) is true if list L is is written to the console, with each
-% element padded to 5 spaces.
+% display(B) is true if the game board (matrix) B is written to the console. The
+% helpers perform the task of recursing through the matrix and 'calling' the
+% appropriate relations for drawing the borders and cell numbers.
 %
 % top/middle/bottom/side_border(B) are true if borders are printed corresponding
 % to a grid matching the size of board B.
@@ -379,7 +377,7 @@ repeat(S, N1) :-
 %                                                                              %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% A discussion of possible algorithms:
+% A discussion of some possible algorithms can be found here:
 %  https://stackoverflow.com/questions/22342854
 %
 % Some of the algorithms are rather complicated, so we chose one of the simpler
@@ -395,6 +393,8 @@ repeat(S, N1) :-
 % correct, when in fact they often are not. This is one of the main drawbacks
 % of this approach, and possibly a reason why increasing the search depth does
 % not improve performance (but rather worsens it, actually).
+%
+% The default search depth is 2. This appears to be the optimum.
 %
 
 % start_auto, play_auto, and slide_auto are slightly adjusted versions of start,
@@ -417,6 +417,7 @@ play_auto(B1, S1) :-
   show_state(B1, S1), nl,
   %% first_valid_move(B1, [1,2,3,4], D),
   optimal_move(B1, 2, D),
+  sleep(0.1),
   slide_auto(B1, D, B2, S2),
   new_number(B2, B3),
   S3 is S1+S2,
@@ -433,12 +434,11 @@ slide_auto(B1, 4, B2, S) :-
 
 % optimal_move(B, D, N) is true if N is the integer representation of the
 % direction of the 'optimal' move on board B, given a search depth of D.
-% We define an optimal move being the first of a sequence of D moves which has
-% the largest value of the maximum number of empty tiles at any step of each
-% sequence of D moves.
 %
 % max_score(B, D, Z, N) is true if Z is the largest score obtained after
 % performing move N on board B and then any combination of D-1 further moves.
+% We define the 'score' as the largest number of empty tiles on any board at any
+% step in a sequence of D moves from board B.
 %
 optimal_move(B, D1, N) :-
   D0 is D1-1,
